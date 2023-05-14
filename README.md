@@ -1,6 +1,6 @@
-# Encrypt and decrypt your files using AES algorithm. It's fast.
+# Encrypt and decrypt your files using AES algorithm
 
-## Installation
+## Getting Started
 
 - Install [Zig](https://ziglang.org/).
 
@@ -11,3 +11,13 @@ git submodule update --init
 ```bash
 zig build run
 ```
+
+## Download
+
+- [Windows](https://github.com/zzk13180/aes-my-file/releases)
+
+## you can open system dialog to select file
+
+<p align='center'>
+  <img src="https://zzk13180.github.io/kit/aes-my-file.gif" width='100%'  alt='preview'>
+</p>
