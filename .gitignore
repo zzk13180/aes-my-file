@@ -1,0 +1,8 @@
+.DS_Store
+zig-cache
+zig-out
+*.wasm
+*.o
+*.a
+
+tmp
