@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-- Install [Zig](https://ziglang.org/).
+- Install [Zig](https://ziglang.org/). zig_version 0.11.0
 
 ```bash
 git submodule update --init
@@ -19,5 +19,5 @@ zig build run
 ## you can open system dialog to select file
 
 <p align='center'>
-  <img src="https://zzk13180.github.io/kit/aes-my-file.gif" width='100%'  alt='preview'>
+  <img src="https://apps.zhangzhankui.com/aes-my-file/aes-my-file.gif" width='100%'  alt='preview'>
 </p>

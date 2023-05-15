@@ -1,33 +1,46 @@
 const std = @import("std");
+const FileSource = std.build.FileSource;
 
 pub fn build(b: *std.build.Builder) void {
-    // Standard target options allows the person running `zig build` to choose
-    // what target to build for. Here we do not override the defaults, which
-    // means any target is allowed, and the default is native. Other options
-    // for restricting supported target set are available.
     const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
 
-    // Standard release options allow the person running `zig build` to select
-    // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
-    const mode = b.standardReleaseOptions();
-
-    const exe = b.addExecutable("aes-my-file", "src/main.zig");
-    exe.setTarget(target);
-    exe.setBuildMode(mode);
+    const exe = b.addExecutable(.{
+        .name = "aes-my-file",
+        .root_source_file = FileSource.relative("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const cflags = [_][]const u8{"-Wall"};
-    exe.addIncludePath(concatAbsolPath("/nativefiledialog/src/include"));
-    exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_common.c"), &cflags);
-    exe.addCSourceFile(concatAbsolPath("/nativefiledialog/src/nfd_win.cpp"), &cflags);
+    exe.addIncludePath(FileSource.relative("src/nfd/include"));
+    exe.addCSourceFile(.{ .file = .{ .path = "src/nfd/nfd_common.c" }, .flags = &cflags });
+    if (exe.target.isDarwin()) {
+        exe.addCSourceFile(.{ .file = .{ .path = "src/nfd/nfd_cocoa.m" }, .flags = &cflags });
+    } else if (exe.target.isWindows()) {
+        exe.addCSourceFile(.{ .file = .{ .path = "src/nfd/nfd_win.cpp" }, .flags = &cflags });
+    } else {
+        exe.addCSourceFile(.{ .file = .{ .path = "src/nfd/nfd_gtk.c" }, .flags = &cflags });
+    }
 
     exe.linkLibC();
-    exe.linkSystemLibrary("shell32");
-    exe.linkSystemLibrary("ole32");
-    exe.linkSystemLibrary("uuid");
+    if (exe.target.isDarwin()) {
+        exe.linkFramework("AppKit");
+    } else if (exe.target.isWindows()) {
+        exe.linkSystemLibrary("shell32");
+        exe.linkSystemLibrary("ole32");
+        exe.linkSystemLibrary("uuid"); // needed by MinGW
+    } else {
+        exe.linkSystemLibrary("atk-1.0");
+        exe.linkSystemLibrary("gdk-3");
+        exe.linkSystemLibrary("gtk-3");
+        exe.linkSystemLibrary("glib-2.0");
+        exe.linkSystemLibrary("gobject-2.0");
+    }
+    exe.installHeadersDirectory("src/nfd/include", ".");
+    b.installArtifact(exe);
 
-    exe.install();
-
-    const run_cmd = exe.run();
+    const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
         run_cmd.addArgs(args);
@@ -35,18 +48,4 @@ pub fn build(b: *std.build.Builder) void {
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
-
-    const exe_tests = b.addTest("src/main.zig");
-    exe_tests.setTarget(target);
-    exe_tests.setBuildMode(mode);
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&exe_tests.step);
-}
-
-fn concatAbsolPath(comptime suffix: []const u8) []const u8 {
-    return comptime blk: {
-        const current_dir = std.fs.path.dirname(@src().file).?;
-        break :blk current_dir ++ suffix;
-    };
 }
