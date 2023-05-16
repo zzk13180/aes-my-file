@@ -6,3 +6,4 @@ zig-out
 *.a
 
 tmp
+test_*

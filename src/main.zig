@@ -9,7 +9,7 @@ const math = std.math;
 const stdc = std.c;
 const crypto = std.crypto;
 const Aes256Gcm = crypto.aead.aes_gcm.Aes256Gcm;
-const HmacSha1 = crypto.auth.hmac.HmacSha1;
+const HmacSha256 = crypto.auth.hmac.sha2.HmacSha256;
 const pwhash = crypto.pwhash;
 
 pub const log_level: std.log.Level = .info;
@@ -17,6 +17,7 @@ const info = std.log.info;
 const warn = std.log.warn;
 const ext_encrypt = ".enc";
 const ext_decrypt = ".dec";
+const salt_length = 16;
 
 pub fn main() !void {
     const stdin = io.getStdIn();
@@ -131,11 +132,11 @@ pub fn main() !void {
     }
 }
 
-fn passwordToKey(password: []const u8) ![32]u8 {
+fn passwordToKey(password: []const u8, salt: []const u8) ![32]u8 {
     var dk: [Aes256Gcm.key_length]u8 = undefined;
     if (password.len == 0) return error.NOpassword;
-    // TODO: 使用更强的哈希函数，更高的迭代次数，以及随机盐值
-    try pwhash.pbkdf2(&dk, password, "AESMYFILE", 5000, HmacSha1);
+    // 使用 HMAC-SHA256，600,000次迭代（OWASP推荐），以及随机盐值
+    try pwhash.pbkdf2(&dk, password, salt, 600_000, HmacSha256);
     return dk;
 }
 
@@ -168,9 +169,14 @@ fn encryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
     const max_size = 4096 * 100 - Aes256Gcm.tag_length - Aes256Gcm.nonce_length;
     const file_size = try file.getEndPos();
 
+    // 生成随机盐值并写入文件头部
+    var salt: [salt_length]u8 = undefined;
+    crypto.random.bytes(&salt);
+    try out_file.writeAll(&salt);
+
     const ad = "";
     var tag: [Aes256Gcm.tag_length]u8 = undefined;
-    var key: [32]u8 = try passwordToKey(password);
+    var key: [32]u8 = try passwordToKey(password, &salt);
     defer @memset(&key, 0);
     var nonce: [Aes256Gcm.nonce_length]u8 = undefined;
 
@@ -179,7 +185,7 @@ fn encryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
     var cipher_buf = std.ArrayList(u8).init(allocator);
     defer cipher_buf.deinit();
 
-    var written: usize = 0;
+    var written: usize = salt_length;
     var read_len: usize = 0;
     info("Encrypting, please wait...", .{});
     while (read_len < file_size) {
@@ -193,9 +199,10 @@ fn encryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
         read_len += try file.readAll(file_buf.items[0..size]);
         Aes256Gcm.encrypt(cipher_buf.items[0..size], &tag, file_buf.items[0..size], ad, nonce, key);
 
-        written += try out_file.write(tag[0..]);
-        written += try out_file.write(nonce[0..]);
-        written += try out_file.write(cipher_buf.items[0..size]);
+        try out_file.writeAll(tag[0..]);
+        try out_file.writeAll(nonce[0..]);
+        try out_file.writeAll(cipher_buf.items[0..size]);
+        written += tag.len + nonce.len + size;
     }
     try out_file.setEndPos(written);
     return true;
@@ -238,8 +245,14 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
     const max_size = 4096 * 100;
     const file_size = try file.getEndPos();
 
+    // 从文件头部读取盐值
+    var salt: [salt_length]u8 = undefined;
+    if (try file.readAll(&salt) != salt_length) {
+        return error.BadPathName;
+    }
+
     const ad = "";
-    var key: [32]u8 = try passwordToKey(password);
+    var key: [32]u8 = try passwordToKey(password, &salt);
     defer @memset(&key, 0);
 
     var file_buf = std.ArrayList(u8).init(allocator);
@@ -248,7 +261,7 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
     defer decrypted_buf.deinit();
 
     var written: usize = 0;
-    var read_len: usize = 0;
+    var read_len: usize = salt_length;
     info("Decrypting, please wait...", .{});
     while (read_len < file_size) {
         const size = @min(max_size, file_size - read_len);
@@ -269,7 +282,8 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: []const
 
         try Aes256Gcm.decrypt(decrypted_buf.items[label_len..size], file_buf.items[label_len..size], tag, ad, nonce, key);
 
-        written += try out_file.write(decrypted_buf.items[label_len..size]);
+        try out_file.writeAll(decrypted_buf.items[label_len..size]);
+        written += (size - label_len);
     }
     return true;
 }
