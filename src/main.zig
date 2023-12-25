@@ -42,9 +42,12 @@ pub fn main() !void {
             try stdout.print("\nyour password:{?s}\n", .{password});
         }
         info("{s}", .{"Please select a file"});
+        // 硬编码路径 不使用文件选择对话框 使用时需要把while循环去掉
+        // const open_path: ?[]const u8 = "/Users/zhangzhankui/zzk13180/github/aes-my-file/tmp/test.zip.enc";
         const open_path = try openFileDialog("*", null);
         if (open_path) |path| {
-            defer stdc.free(@intToPtr(*anyopaque, @ptrToInt(path.ptr)));
+            info("{s}", .{path});
+            defer stdc.free(@constCast(path.ptr));
             if (!!mem.endsWith(u8, path, ext_encrypt)) {
                 info("{s}", .{"Decrypting file"});
                 if (decryptFile(allocator, path, password)) |_| {
@@ -108,7 +111,7 @@ fn encryptFile(allocator: std.mem.Allocator, path: []const u8, password: ?[]cons
     defer file.close();
 
     const file_info = try file.stat();
-    if (file_info.kind != .File) {
+    if (file_info.kind != .file) {
         return error.BadPathName;
     }
 
@@ -121,7 +124,7 @@ fn encryptFile(allocator: std.mem.Allocator, path: []const u8, password: ?[]cons
     const out_file = try fs.createFileAbsolute(out_path, .{
         .truncate = true,
         .exclusive = true,
-        .lock = .Exclusive,
+        .lock = .exclusive,
     });
     defer out_file.close();
 
@@ -168,7 +171,7 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: ?[]cons
     defer file.close();
 
     const file_info = try file.stat();
-    if (file_info.kind != .File) {
+    if (file_info.kind != .file) {
         return error.BadPathName;
     }
 
@@ -189,7 +192,7 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: ?[]cons
     const out_file = try fs.createFileAbsolute(out_path, .{
         .truncate = true,
         .exclusive = true,
-        .lock = .Exclusive,
+        .lock = .exclusive,
     });
     defer out_file.close();
 
@@ -206,7 +209,7 @@ fn decryptFile(allocator: std.mem.Allocator, path: []const u8, password: ?[]cons
 
     var written: usize = 0;
     var read_len: usize = 0;
-    info("Encrypting please wait", .{});
+    info("Decrypting please wait", .{});
     while (read_len < file_size) {
         const size = @min(max_size, file_size - read_len);
         try file_buf.ensureTotalCapacity(size);

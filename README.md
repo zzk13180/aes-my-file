@@ -2,7 +2,7 @@
 
 ## Getting Started
 
-- Install [Zig](https://ziglang.org/).
+- Install [Zig](https://ziglang.org/). zig_version 0.11.0
 
 ```bash
 git submodule update --init
